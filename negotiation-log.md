@@ -20,8 +20,8 @@
 
 - Raised by: Consumer
 - Endpoint/Event:
-  - `telemetry.ingested`
-  - `device.status.changed`
+  - `telemetry.ingested.v1`
+  - `device.status.changed.v1`
   - `camera.motion.detected`
   - `camera.status.changed`
   - `alert.created`
@@ -72,17 +72,20 @@
 
 ---
 
-## Issue #5 — IoT telemetry cần thống nhất unit
+## Issue #5 — IoT telemetry cần thống nhất unit và batch
 
 - Raised by: Consumer
-- Endpoint/Event: `telemetry.ingested`
-- Concern: Nếu unit không thống nhất, metric nhiệt độ/độ ẩm sẽ sai.
+- Endpoint/Event: `telemetry.ingested.v1`
+- Concern: Nếu unit không thống nhất, metric nhiệt độ/độ ẩm/chất lượng không khí sẽ sai. Ngoài ra nếu IoT gửi batch nhưng Analytics chỉ xử lý event đơn thì sẽ lỗi tích hợp.
 - Proposal:
-  - `metricType`: `temperature`, `humidity`, `light`, `air_quality`
-  - `unit`: `celsius`, `percent`, `lux`, `ppm`
+  - `metricType`: `temperature`, `humidity`, `light`, `air_quality`, `pressure`
+  - `unit`: `°C`, `%`, `lux`, `ppm`, `μg/m³`, `Pa`
+  - V1 chỉ nhận event đơn, mỗi event gồm `value` và `timestamp`.
+  - `batchId` là optional field để chuẩn bị cho V2, không bắt buộc trong Lab 02.
+  - Unit không hợp lệ sẽ được đưa vào DLQ nếu hệ thống hỗ trợ.
 - Resolution: Accepted
-- Rationale: Unit thống nhất giúp Analytics tính toán đúng.
-- Impact: IoT normalize unit trước khi gửi; Analytics validate unit trước khi tính metric.
+- Rationale: IoT Ingestion normalize unit trước khi publish giúp Analytics không phải tự convert dữ liệu từ nhiều loại sensor.
+- Impact: IoT Ingestion publish đúng unit đã thống nhất; Analytics validate unit trước khi aggregate.
 
 ---
 
@@ -139,10 +142,13 @@
 - Concern: Event sai schema hoặc lỗi xử lý nếu retry vô hạn sẽ gây lặp và nghẽn hệ thống.
 - Proposal:
   - Retry tối đa 3 lần.
+  - Với IoT events, retry theo backoff 1s, 2s, 4s nếu broker hỗ trợ.
   - Sau 3 lần lỗi, đưa event vào DLQ nếu hệ thống có hỗ trợ.
+  - DLQ record nên có `eventId`, `eventType`, `errorType`, `errorMessage`, `failedAt`.
+  - Với IoT, DLQ dự kiến là `campus.iot.dlq`.
 - Resolution: Accepted
-- Rationale: DLQ giúp tách event lỗi để debug.
-- Impact: Provider/Broker ghi nhận retry/DLQ policy.
+- Rationale: DLQ giúp tách event lỗi để debug mà không làm nghẽn luồng chính.
+- Impact: Provider/Broker ghi nhận retry/DLQ policy; Analytics không aggregate event lỗi.
 
 ---
 
@@ -150,11 +156,14 @@
 
 - Raised by: Consumer
 - Endpoint/Event: All events
-- Concern: Event có thể đến không đúng thứ tự do Queue async.
-- Proposal: Analytics aggregate theo `timestamp`, không dựa vào thứ tự nhận event.
+- Concern: Event có thể đến không đúng thứ tự do Queue async, đặc biệt là telemetry từ nhiều device IoT.
+- Proposal:
+  - Analytics aggregate theo `timestamp`, không dựa vào thứ tự nhận event.
+  - Với IoT, `timestamp` là thời điểm device gửi dữ liệu, không phải thời điểm publish.
+  - Timestamp dùng ISO 8601 UTC, ví dụ `2026-05-18T12:00:00Z`.
 - Resolution: Accepted
-- Rationale: Giúp metric ổn định hơn khi event bị delay.
-- Impact: Provider phải gửi timestamp chính xác.
+- Rationale: Aggregate theo timestamp giúp metric ổn định hơn khi event bị delay hoặc đến sai thứ tự.
+- Impact: Provider phải gửi timestamp chính xác; Analytics cần xử lý event theo cửa sổ thời gian.
 
 ---
 

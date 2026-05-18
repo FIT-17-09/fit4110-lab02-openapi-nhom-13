@@ -34,8 +34,8 @@ Các cặp liên quan đến Analytics là Queue async. Analytics không gọi R
 
 | Method | Path | Lúc nào gọi? | Kỳ vọng response |
 |---|---|---|---|
-| N/A | `telemetry.ingested` | Khi IoT Ingestion gửi dữ liệu cảm biến mới | Analytics nhận event có `deviceId`, `area`, `metricType`, `value`, `unit`, `timestamp` |
-| N/A | `device.status.changed` | Khi trạng thái thiết bị IoT thay đổi | Analytics nhận event có `deviceId`, `status`, `timestamp` |
+| N/A | `telemetry.ingested.v1` | Khi IoT Ingestion gửi dữ liệu cảm biến mới | Analytics nhận event có `deviceId`, `area`, `metricType`, `value`, `unit`, `timestamp` |
+| N/A | `device.status.changed.v1` | Khi trạng thái thiết bị IoT thay đổi | Analytics nhận event có `deviceId`, `status`, `timestamp` |
 | N/A | `camera.motion.detected` | Khi Camera Stream phát hiện chuyển động | Analytics nhận event có `cameraId`, `area`, `eventName`, `timestamp` |
 | N/A | `camera.status.changed` | Khi camera online/offline | Analytics nhận event có `cameraId`, `status`, `timestamp` |
 | N/A | `alert.created` | Khi Core Business tạo cảnh báo | Analytics nhận event có `alertId`, `alertType`, `severity`, `timestamp` |
@@ -78,7 +78,7 @@ Ghi chú: Vì đây là Queue async nên `Method` và `Path` không dùng HTTP m
 ## 5. Câu hỏi cho Provider
 
 1. IoT Ingestion có thống nhất các `metricType` là `temperature`, `humidity`, `light`, `air_quality` không?
-2. IoT Ingestion có thống nhất unit là `celsius`, `percent`, `lux`, `ppm` không?
+2. IoT Ingestion có thống nhất unit là `°C`, `%`, `lux`, `ppm`, `μg/m³`, `Pa` không?
 3. Camera Stream có gửi `confidence` trong event phát hiện chuyển động không?
 4. Camera Stream có gửi ảnh thật trong event không, hay chỉ gửi `imageRef`?
 5. Core Business có thống nhất `severity` là `low`, `medium`, `high`, `critical` không?
