@@ -168,6 +168,44 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /dashboard/overview:
+    get:
+      tags:
+        - Analytics
+      summary: Get dashboard overview
+      description: Return dashboard metric cards using oneOf and discriminator.
+      operationId: getDashboardOverview
+      parameters:
+        - $ref: '#/components/parameters/DateQuery'
+      responses:
+        '200':
+          description: Dashboard overview report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardOverview'
+              examples:
+                sample:
+                  value:
+                    date: '2026-05-02'
+                    cards:
+                      - type: access
+                        title: Total access
+                        value: 120
+                        unit: count
+                      - type: alert
+                        title: Total alerts
+                        value: 5
+                        unit: count
+                      - type: temperature
+                        title: Average temperature
+                        value: 30.8
+                        unit: celsius
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
 components:
   parameters:
     DateQuery:
@@ -374,6 +412,97 @@ components:
         critical:
           type: integer
           minimum: 0
+
+    DashboardOverview:
+      type: object
+      required:
+        - date
+        - cards
+      properties:
+        date:
+          type: string
+          format: date
+        cards:
+          type: array
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/AccessMetricCard'
+              - $ref: '#/components/schemas/AlertMetricCard'
+              - $ref: '#/components/schemas/TemperatureMetricCard'
+            discriminator:
+              propertyName: type
+              mapping:
+                access: '#/components/schemas/AccessMetricCard'
+                alert: '#/components/schemas/AlertMetricCard'
+                temperature: '#/components/schemas/TemperatureMetricCard'
+
+    AccessMetricCard:
+      type: object
+      required:
+        - type
+        - title
+        - value
+        - unit
+      properties:
+        type:
+          type: string
+          const: access
+        title:
+          type: string
+          example: Total access
+        value:
+          type: integer
+          minimum: 0
+          example: 120
+        unit:
+          type: string
+          enum:
+            - count
+
+    AlertMetricCard:
+      type: object
+      required:
+        - type
+        - title
+        - value
+        - unit
+      properties:
+        type:
+          type: string
+          const: alert
+        title:
+          type: string
+          example: Total alerts
+        value:
+          type: integer
+          minimum: 0
+          example: 5
+        unit:
+          type: string
+          enum:
+            - count
+
+    TemperatureMetricCard:
+      type: object
+      required:
+        - type
+        - title
+        - value
+        - unit
+      properties:
+        type:
+          type: string
+          const: temperature
+        title:
+          type: string
+          example: Average temperature
+        value:
+          type: number
+          example: 30.8
+        unit:
+          type: string
+          enum:
+            - celsius
 
     Problem:
       type: object
