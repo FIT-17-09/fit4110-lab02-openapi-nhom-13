@@ -1,632 +1,399 @@
 openapi: 3.1.0
 info:
-  title: Smart Campus — Lab 02 Contract Template
+  title: Smart Campus Analytics Service API
   version: 1.0.0
-  description: |
-    Hợp đồng API mẫu cho Lab 02.
-    Sinh viên cần sửa lại title, description, path, schema và example theo cặp đàm phán thực tế.
+  description: API contract for Analytics Service reports in Lab 02.
   contact:
-    name: FIT4110 Teaching Team
-    email: fit4110@example.edu.vn
+    name: B5 Analytics Team
+    email: b5-analytics@example.com
+
 servers:
   - url: http://localhost:4010
-    description: Prism mock server
-  - url: https://api.campus.local
-    description: Class network placeholder
+    description: Local Prism mock server
+
 tags:
-  - name: health
-    description: Kiểm tra trạng thái service
-  - name: alerts
-    description: Quản lý cảnh báo Smart Campus
-  - name: events
-    description: Quản lý sự kiện nghiệp vụ
-security:
-  - bearerAuth: []
+  - name: Health
+    description: Health check endpoints
+  - name: Analytics
+    description: Analytics report endpoints
+
 paths:
   /health:
     get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check whether Analytics Service is running.
       operationId: getHealth
-      summary: Kiểm tra trạng thái service
-      description: Endpoint kiểm tra service còn hoạt động.
-      tags: [health]
-      security: []
       responses:
         '200':
-          description: Service đang hoạt động
+          description: Service is healthy
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HealthStatus'
+                $ref: '#/components/schemas/HealthResponse'
               examples:
                 ok:
                   value:
                     status: ok
-                    service: lab02-contract-template
-                    time: '2026-05-10T08:00:00Z'
+                    service: analytics-service
 
-  /alerts:
-    post:
-      operationId: createAlert
-      summary: Tạo cảnh báo mới
-      description: |
-        Endpoint mẫu để Provider nhận yêu cầu tạo cảnh báo từ Consumer.
-        Sinh viên cần sửa theo cặp đàm phán thực tế.
-      tags: [alerts]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateAlertRequest'
-            examples:
-              unauthorizedAccess:
-                value:
-                  sourceService: core-business
-                  alertType: UNAUTHORIZED_ACCESS
-                  severity: HIGH
-                  message: Phát hiện truy cập trái phép tại cổng chính
-                  relatedEventId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
+  /analytics/daily-summary:
+    get:
+      tags:
+        - Analytics
+      summary: Get daily analytics summary
+      description: Return total access, total alerts, average temperature, motion detections, and abnormal events for a specific date.
+      operationId: getDailySummary
+      parameters:
+        - $ref: '#/components/parameters/DateQuery'
+        - $ref: '#/components/parameters/AreaQuery'
       responses:
-        '201':
-          description: Cảnh báo đã được tạo
-          headers:
-            Location:
-              description: URI của alert vừa tạo.
-              schema:
-                type: string
-                format: uri
+        '200':
+          description: Daily summary report
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Alert'
+                $ref: '#/components/schemas/DailySummary'
               examples:
-                created:
+                sample:
                   value:
-                    id: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-                    sourceService: core-business
-                    alertType: UNAUTHORIZED_ACCESS
-                    severity: HIGH
-                    message: Phát hiện truy cập trái phép tại cổng chính
-                    relatedEventId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-                    status: OPEN
-                    createdAt: '2026-05-10T08:00:00Z'
-                    resolvedAt: null
+                    date: '2026-05-02'
+                    area: null
+                    totalAccess: 120
+                    totalAlerts: 5
+                    avgTemperature: 30.8
+                    motionDetections: 18
+                    abnormalEvents: 2
         '400':
           $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /analytics/access/hourly:
     get:
-      operationId: listAlerts
-      summary: Lấy danh sách cảnh báo
-      description: Lấy danh sách cảnh báo với cursor-based pagination.
-      tags: [alerts]
+      tags:
+        - Analytics
+      summary: Get hourly access statistics
+      description: Return entry, exit, and denied access counts grouped by hour for a specific date.
+      operationId: getHourlyAccess
       parameters:
-        - $ref: '#/components/parameters/Cursor'
-        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/DateQuery'
+        - $ref: '#/components/parameters/AreaQuery'
       responses:
         '200':
-          description: Danh sách cảnh báo
+          description: Hourly access report
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AlertPage'
+                $ref: '#/components/schemas/HourlyAccessReport'
               examples:
-                firstPage:
+                sample:
                   value:
+                    date: '2026-05-02'
+                    area: main-gate
                     items:
-                      - id: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-                        sourceService: core-business
-                        alertType: UNAUTHORIZED_ACCESS
-                        severity: HIGH
-                        message: Phát hiện truy cập trái phép tại cổng chính
-                        relatedEventId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-                        status: OPEN
-                        createdAt: '2026-05-10T08:00:00Z'
-                        resolvedAt: null
-                    nextCursor: null
-                    hasMore: false
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
-  /alerts/recent:
-    get:
-      operationId: getRecentAlerts
-      summary: Lấy các cảnh báo gần đây
-      description: Endpoint mẫu cho cặp Analytics ↔ Core Business hoặc Frontend ↔ Core Business.
-      tags: [alerts]
-      parameters:
-        - name: limit
-          in: query
-          required: false
-          description: Số cảnh báo tối đa cần lấy.
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
-      responses:
-        '200':
-          description: Danh sách cảnh báo gần đây
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required: [items]
-                properties:
-                  items:
-                    type: array
-                    minItems: 0
-                    maxItems: 100
-                    items:
-                      $ref: '#/components/schemas/Alert'
-              examples:
-                recentAlerts:
-                  value:
-                    items: []
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
-  /alerts/{alertId}:
-    get:
-      operationId: getAlertById
-      summary: Lấy chi tiết một cảnh báo
-      description: Lấy chi tiết alert theo UUID.
-      tags: [alerts]
-      parameters:
-        - $ref: '#/components/parameters/AlertId'
-      responses:
-        '200':
-          description: Chi tiết cảnh báo
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Alert'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
-  /events:
-    post:
-      operationId: createCampusEvent
-      summary: Gửi sự kiện nghiệp vụ vào hệ thống
-      description: |
-        Endpoint minh họa polymorphism. Event có thể là SensorEvent hoặc AccessEvent.
-      tags: [events]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CampusEvent'
-            examples:
-              sensorEvent:
-                value:
-                  eventType: SENSOR_READING
-                  eventId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-                  deviceId: SENSOR-001
-                  metric: temperature
-                  value: 38.5
-                  unit: celsius
-                  timestamp: '2026-05-10T08:00:00Z'
-              accessEvent:
-                value:
-                  eventType: ACCESS_CHECK
-                  eventId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babd
-                  gateId: GATE-01
-                  cardId: RFID-2026-001
-                  decision: ALLOW
-                  timestamp: '2026-05-10T08:01:00Z'
-      responses:
-        '201':
-          description: Event đã được ghi nhận
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EventAccepted'
+                      - hour: '08:00'
+                        entries: 35
+                        exits: 20
+                        denied: 2
+                      - hour: '09:00'
+                        entries: 42
+                        exits: 18
+                        denied: 1
         '400':
           $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
-webhooks:
-  alertCreated:
-    post:
-      operationId: onAlertCreated
-      summary: Webhook khi có alert mới
-      description: Provider phát sự kiện khi một cảnh báo mới được tạo.
-      tags: [alerts]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Alert'
+  /analytics/temperature/average:
+    get:
+      tags:
+        - Analytics
+      summary: Get average temperature
+      description: Return average temperature for a specific date and optional area.
+      operationId: getAverageTemperature
+      parameters:
+        - $ref: '#/components/parameters/DateQuery'
+        - $ref: '#/components/parameters/AreaQuery'
       responses:
         '200':
-          description: Consumer đã nhận webhook
+          description: Average temperature report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemperatureAverageReport'
+              examples:
+                sample:
+                  value:
+                    date: '2026-05-02'
+                    area: room-a101
+                    avgTemperature: 30.8
+                    unit: celsius
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /analytics/alerts/daily:
+    get:
+      tags:
+        - Analytics
+      summary: Get daily alert statistics
+      description: Return total alerts and alert counts by severity for a specific date.
+      operationId: getDailyAlerts
+      parameters:
+        - $ref: '#/components/parameters/DateQuery'
+        - $ref: '#/components/parameters/AreaQuery'
+      responses:
+        '200':
+          description: Daily alert report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyAlertReport'
+              examples:
+                sample:
+                  value:
+                    date: '2026-05-02'
+                    area: null
+                    totalAlerts: 5
+                    bySeverity:
+                      low: 1
+                      medium: 2
+                      high: 1
+                      critical: 1
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
 components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-
   parameters:
-    AlertId:
-      name: alertId
-      in: path
+    DateQuery:
+      name: date
+      in: query
       required: true
-      description: UUID của cảnh báo.
+      description: Report date.
       schema:
         type: string
-        format: uuid
-    Cursor:
-      name: cursor
+        format: date
+      example: '2026-05-02'
+
+    AreaQuery:
+      name: area
       in: query
       required: false
-      description: Cursor dùng để lấy trang tiếp theo.
+      description: Area, room, or gate filter. If omitted, return all areas.
       schema:
-        type: [string, 'null']
-        minLength: 1
-        maxLength: 200
-    Limit:
-      name: limit
-      in: query
-      required: false
-      description: Số item tối đa mỗi trang.
-      schema:
-        type: integer
-        minimum: 1
-        maximum: 100
-        default: 20
+        type:
+          - string
+          - 'null'
+      example: main-gate
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            invalidDate:
+              value:
+                type: https://smart-campus.example.com/problems/invalid-request
+                title: Invalid request
+                status: 400
+                detail: date must be in YYYY-MM-DD format
+                instance: /analytics/daily-summary
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            serverError:
+              value:
+                type: https://smart-campus.example.com/problems/internal-server-error
+                title: Internal server error
+                status: 500
+                detail: Unexpected error while generating analytics report
+                instance: /analytics/daily-summary
 
   schemas:
-    HealthStatus:
+    HealthResponse:
       type: object
-      additionalProperties: false
-      required: [status, service, time]
+      required:
+        - status
+        - service
       properties:
         status:
           type: string
-          enum: [ok]
-          description: Trạng thái service.
-          example: ok
+          enum:
+            - ok
         service:
           type: string
-          minLength: 2
-          maxLength: 80
-          description: Tên service.
-          example: lab02-contract-template
-        time:
-          type: string
-          format: date-time
-          description: Thời điểm kiểm tra.
-          example: '2026-05-10T08:00:00Z'
+          example: analytics-service
 
-    CreateAlertRequest:
+    DailySummary:
       type: object
-      additionalProperties: false
-      required: [sourceService, alertType, severity, message]
+      required:
+        - date
+        - area
+        - totalAccess
+        - totalAlerts
+        - avgTemperature
+        - motionDetections
+        - abnormalEvents
       properties:
-        sourceService:
+        date:
           type: string
-          minLength: 2
-          maxLength: 80
-          pattern: '^[a-z0-9-]+$'
-          description: Service tạo alert.
-          example: core-business
-        alertType:
-          type: string
-          enum: [UNAUTHORIZED_ACCESS, SENSOR_THRESHOLD_EXCEEDED, UNKNOWN_PERSON, SYSTEM_ERROR]
-          description: Loại cảnh báo.
-          example: UNAUTHORIZED_ACCESS
-        severity:
-          $ref: '#/components/schemas/AlertSeverity'
-        message:
-          type: string
-          minLength: 5
-          maxLength: 500
-          description: Nội dung cảnh báo.
-          example: Phát hiện truy cập trái phép tại cổng chính
-        relatedEventId:
-          type: [string, 'null']
-          format: uuid
-          description: Event liên quan, có thể null nếu chưa có event id.
-          example: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
+          format: date
+        area:
+          type:
+            - string
+            - 'null'
+        totalAccess:
+          type: integer
+          minimum: 0
+        totalAlerts:
+          type: integer
+          minimum: 0
+        avgTemperature:
+          type: number
+        motionDetections:
+          type: integer
+          minimum: 0
+        abnormalEvents:
+          type: integer
+          minimum: 0
 
-    Alert:
-      allOf:
-        - $ref: '#/components/schemas/CreateAlertRequest'
-        - type: object
-          additionalProperties: false
-          required: [id, status, createdAt, resolvedAt]
-          properties:
-            id:
-              type: string
-              format: uuid
-              description: UUID của alert.
-              example: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-            status:
-              type: string
-              enum: [OPEN, ACKNOWLEDGED, RESOLVED]
-              description: Trạng thái xử lý alert.
-              example: OPEN
-            createdAt:
-              type: string
-              format: date-time
-              description: Thời điểm tạo alert.
-              example: '2026-05-10T08:00:00Z'
-            resolvedAt:
-              type: [string, 'null']
-              format: date-time
-              description: Thời điểm xử lý xong, null nếu chưa xử lý.
-              example: null
-
-    AlertSeverity:
-      type: string
-      enum: [LOW, MEDIUM, HIGH, CRITICAL]
-      description: Mức độ nghiêm trọng của cảnh báo.
-      example: HIGH
-
-    AlertPage:
+    HourlyAccessReport:
       type: object
-      additionalProperties: false
-      required: [items, nextCursor, hasMore]
+      required:
+        - date
+        - area
+        - items
       properties:
+        date:
+          type: string
+          format: date
+        area:
+          type:
+            - string
+            - 'null'
         items:
           type: array
-          minItems: 0
-          maxItems: 100
           items:
-            $ref: '#/components/schemas/Alert'
-        nextCursor:
-          type: [string, 'null']
-          description: Cursor trang tiếp theo, null nếu hết dữ liệu.
-          example: null
-        hasMore:
-          type: boolean
-          description: Còn dữ liệu ở trang sau hay không.
-          example: false
+            $ref: '#/components/schemas/HourlyAccessItem'
 
-    CampusEvent:
-      oneOf:
-        - $ref: '#/components/schemas/SensorEvent'
-        - $ref: '#/components/schemas/AccessEvent'
-      discriminator:
-        propertyName: eventType
-        mapping:
-          SENSOR_READING: '#/components/schemas/SensorEvent'
-          ACCESS_CHECK: '#/components/schemas/AccessEvent'
-
-    SensorEvent:
+    HourlyAccessItem:
       type: object
-      additionalProperties: false
-      required: [eventType, eventId, deviceId, metric, value, unit, timestamp]
+      required:
+        - hour
+        - entries
+        - exits
+        - denied
       properties:
-        eventType:
+        hour:
           type: string
-          const: SENSOR_READING
-          description: Loại event.
-          example: SENSOR_READING
-        eventId:
+          pattern: '^([01][0-9]|2[0-3]):00$'
+          example: '08:00'
+        entries:
+          type: integer
+          minimum: 0
+        exits:
+          type: integer
+          minimum: 0
+        denied:
+          type: integer
+          minimum: 0
+
+    TemperatureAverageReport:
+      type: object
+      required:
+        - date
+        - area
+        - avgTemperature
+        - unit
+      properties:
+        date:
           type: string
-          format: uuid
-          description: UUID của event.
-        deviceId:
-          type: string
-          pattern: '^SENSOR-[0-9]{3}$'
-          description: Mã thiết bị cảm biến.
-          example: SENSOR-001
-        metric:
-          type: string
-          enum: [temperature, humidity, smoke, motion]
-          description: Loại chỉ số cảm biến.
-          example: temperature
-        value:
+          format: date
+        area:
+          type:
+            - string
+            - 'null'
+        avgTemperature:
           type: number
-          minimum: -100
-          maximum: 1000
-          description: Giá trị đo được.
-          example: 38.5
         unit:
           type: string
-          minLength: 1
-          maxLength: 20
-          description: Đơn vị đo.
-          example: celsius
-        timestamp:
-          type: string
-          format: date-time
-          description: Thời điểm đo.
+          enum:
+            - celsius
 
-    AccessEvent:
+    DailyAlertReport:
       type: object
-      additionalProperties: false
-      required: [eventType, eventId, gateId, cardId, decision, timestamp]
+      required:
+        - date
+        - area
+        - totalAlerts
+        - bySeverity
       properties:
-        eventType:
+        date:
           type: string
-          const: ACCESS_CHECK
-          description: Loại event.
-          example: ACCESS_CHECK
-        eventId:
-          type: string
-          format: uuid
-          description: UUID của event.
-        gateId:
-          type: string
-          pattern: '^GATE-[0-9]{2}$'
-          description: Mã cổng.
-          example: GATE-01
-        cardId:
-          type: string
-          pattern: '^RFID-[0-9]{4}-[0-9]{3}$'
-          description: Mã thẻ RFID.
-          example: RFID-2026-001
-        decision:
-          type: string
-          enum: [ALLOW, DENY]
-          description: Quyết định truy cập.
-          example: ALLOW
-        timestamp:
-          type: string
-          format: date-time
-          description: Thời điểm kiểm tra.
+          format: date
+        area:
+          type:
+            - string
+            - 'null'
+        totalAlerts:
+          type: integer
+          minimum: 0
+        bySeverity:
+          $ref: '#/components/schemas/AlertSeverityCount'
 
-    EventAccepted:
+    AlertSeverityCount:
       type: object
-      additionalProperties: false
-      required: [eventId, acceptedAt]
+      required:
+        - low
+        - medium
+        - high
+        - critical
       properties:
-        eventId:
-          type: string
-          format: uuid
-          description: UUID của event được nhận.
-        acceptedAt:
-          type: string
-          format: date-time
-          description: Thời điểm hệ thống ghi nhận event.
+        low:
+          type: integer
+          minimum: 0
+        medium:
+          type: integer
+          minimum: 0
+        high:
+          type: integer
+          minimum: 0
+        critical:
+          type: integer
+          minimum: 0
 
     Problem:
       type: object
-      additionalProperties: false
-      required: [type, title, status]
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - instance
       properties:
         type:
           type: string
           format: uri
-          description: URI định danh loại lỗi.
-          example: https://campus.local/errors/validation
         title:
           type: string
-          minLength: 3
-          maxLength: 120
-          description: Tiêu đề lỗi ngắn gọn.
-          example: Dữ liệu không hợp lệ
         status:
           type: integer
           minimum: 400
           maximum: 599
-          description: HTTP status code.
-          example: 400
         detail:
-          type: [string, 'null']
-          maxLength: 500
-          description: Mô tả chi tiết lỗi.
-          example: Field cardId không đúng định dạng
+          type: string
         instance:
-          type: [string, 'null']
-          format: uri
-          description: URI của request gây lỗi.
-          example: /alerts
-        errors:
-          type: array
-          minItems: 0
-          maxItems: 50
-          items:
-            type: object
-            additionalProperties: false
-            required: [field, code, message]
-            properties:
-              field:
-                type: string
-                minLength: 1
-                maxLength: 80
-                example: cardId
-              code:
-                type: string
-                minLength: 2
-                maxLength: 80
-                example: PATTERN_MISMATCH
-              message:
-                type: string
-                minLength: 3
-                maxLength: 200
-                example: cardId phải có dạng RFID-YYYY-NNN
-
-  responses:
-    BadRequest:
-      description: Dữ liệu sai định dạng
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-          example:
-            type: https://campus.local/errors/validation
-            title: Dữ liệu không hợp lệ
-            status: 400
-            detail: Payload không đúng JSON Schema
-            instance: /alerts
-            errors:
-              - field: alertType
-                code: ENUM_MISMATCH
-                message: alertType không nằm trong danh sách cho phép
-
-    Unauthorized:
-      description: Thiếu hoặc sai thông tin xác thực
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-          example:
-            type: https://campus.local/errors/unauthorized
-            title: Chưa xác thực
-            status: 401
-            detail: Thiếu Bearer token
-            instance: /alerts/recent
-            errors: []
-
-    Forbidden:
-      description: Không có quyền thực hiện thao tác
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-
-    NotFound:
-      description: Resource không tồn tại
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-
-    Conflict:
-      description: Xung đột nghiệp vụ hoặc trùng idempotency key
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-
-    UnprocessableEntity:
-      description: Payload đúng định dạng nhưng không hợp lệ về nghiệp vụ
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-
-    InternalServerError:
-      description: Lỗi không mong muốn phía server
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
+          type: string
