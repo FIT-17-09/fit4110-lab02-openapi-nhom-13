@@ -1,4 +1,4 @@
-openapi: 3.1.0
+openapi: 3.0.3
 info:
   title: Smart Campus Analytics Service API
   version: 1.0.0
@@ -59,7 +59,7 @@ paths:
                 sample:
                   value:
                     date: '2026-05-02'
-                    area: null
+                    area: all-campus
                     totalAccess: 120
                     totalAlerts: 5
                     avgTemperature: 30.8
@@ -156,7 +156,7 @@ paths:
                 sample:
                   value:
                     date: '2026-05-02'
-                    area: null
+                    area: all-campus
                     totalAlerts: 5
                     bySeverity:
                       low: 1
@@ -224,10 +224,9 @@ components:
       required: false
       description: Area, room, or gate filter. If omitted, return all areas.
       schema:
-        type:
-          - string
-          - 'null'
-      example: main-gate
+        type: string
+        nullable: true
+        example: main-gate
 
   responses:
     BadRequest:
@@ -290,9 +289,8 @@ components:
           type: string
           format: date
         area:
-          type:
-            - string
-            - 'null'
+          type: string
+          nullable: true
         totalAccess:
           type: integer
           minimum: 0
@@ -319,9 +317,8 @@ components:
           type: string
           format: date
         area:
-          type:
-            - string
-            - 'null'
+          type: string
+          nullable: true
         items:
           type: array
           items:
@@ -361,11 +358,12 @@ components:
           type: string
           format: date
         area:
-          type:
-            - string
-            - 'null'
+          type: string
+          nullable: true
         avgTemperature:
           type: number
+          nullable: true
+          example: 30.5
         unit:
           type: string
           enum:
@@ -383,9 +381,8 @@ components:
           type: string
           format: date
         area:
-          type:
-            - string
-            - 'null'
+          type: string
+          nullable: true
         totalAlerts:
           type: integer
           minimum: 0
@@ -446,7 +443,8 @@ components:
       properties:
         type:
           type: string
-          const: access
+          enum:
+            - access
         title:
           type: string
           example: Total access
@@ -469,7 +467,8 @@ components:
       properties:
         type:
           type: string
-          const: alert
+          enum:
+            - alert
         title:
           type: string
           example: Total alerts
@@ -492,7 +491,8 @@ components:
       properties:
         type:
           type: string
-          const: temperature
+          enum:
+            - temperature
         title:
           type: string
           example: Average temperature
