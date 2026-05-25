@@ -1,185 +1,569 @@
-# Biên bản đàm phán hợp đồng API/Event
+# Biên bản đàm phán hợp đồng API/Event — B5 Analytics
 
-- Cặp đàm phán:
-  - Pair 06: IoT Ingestion → Analytics
-  - Pair 07: Camera Stream → Analytics
-  - Pair 08: Core Business → Analytics
-  - Pair 09: Access Gate → Analytics
 - Product: B
-- Provider:
-  - B1 — IoT Ingestion
-  - B2 — Camera Stream
-  - B6 — Core Business
-  - B3 — Access Gate
-- Consumer: B5 — Analytics
-- Ngày: 2026-05-18
+- Service chính: B5 — Analytics Service
+- Nhóm viết: B5
+- Phiên bản: v1.0
+- Ngày cập nhật: 2026-05-25
 
 ---
 
-## Issue #1 — Thống nhất tên event/topic
+## 1. Tổng quan các cặp tích hợp của B5
 
-- Raised by: Consumer
-- Endpoint/Event:
-  - `telemetry.ingested.v1`
-  - `device.status.changed.v1`
-  - `camera.motion.detected`
-  - `camera.status.changed`
-  - `alert.created`
-  - `alert.resolved`
-  - `access.log.created`
-  - `access.denied`
-- Concern: Nếu Provider publish sai tên event/topic, Analytics sẽ không nhận được dữ liệu.
-- Proposal: Thống nhất tên event trước khi triển khai.
-- Resolution: Accepted
-- Rationale: Tên event thống nhất giúp các service tích hợp đúng.
-- Impact: Provider publish đúng event name đã chốt, Consumer subscribe đúng topic.
+| Pair | Provider | Consumer | Cơ chế | Mục đích |
+|---|---|---|---|---|
+| Pair 06 | B1 — IoT Ingestion | B5 — Analytics | Queue async | Feed telemetry cho aggregate |
+| Pair 07 | B2 — Camera Stream | B5 — Analytics | Queue async | Feed event camera cho aggregate |
+| Pair B4-B5 | B4 — AI Vision | B5 — Analytics | Queue async/Event JSON | Feed kết quả AI analysis cho dashboard |
+| Pair 08 | B6 — Core Business | B5 — Analytics | Queue async | Feed alert/decision/policy event cho KPI |
+| Pair 09 | B3 — Access Gate | B5 — Analytics | Queue async | Feed log ra/vào cho thống kê |
+| Pair B7-B5 | B7 — Notification | B5 — Analytics | Queue async | Feed notification event cho KPI/report |
 
----
+Ghi chú:
 
-## Issue #2 — Thiếu eventId gây duplicate metric
-
-- Raised by: Consumer
-- Endpoint/Event: All events
-- Concern: Event có thể bị retry hoặc publish lại, khiến Analytics tính trùng metric.
-- Proposal: Mọi event bắt buộc có `eventId`.
-- Resolution: Accepted
-- Rationale: `eventId` giúp Analytics nhận diện event trùng.
-- Impact: Provider sinh `eventId`; Analytics dùng `eventId` để deduplicate.
+- Các cặp Queue async trong Lab 02 chưa cần AsyncAPI đầy đủ.
+- Mục tiêu Lab 02 là ghi nhận event contract sơ bộ: event/topic, producer, consumer, payload tối thiểu, `eventId`, `timestamp`, `correlationId`, retry/DLQ.
+- Với B3 — Access Gate, hiện B5 chưa nhận được file negotiation-log riêng từ B3, nên phần Pair 09 được ghi theo giả định ban đầu và cần B3 xác nhận lại.
 
 ---
 
-## Issue #3 — Thiếu correlationId gây khó trace
+# 2. Pair 06 — B1 IoT Ingestion → B5 Analytics
 
-- Raised by: Consumer
-- Endpoint/Event: All events
-- Concern: Khi báo cáo sai, nhóm khó truy vết event gốc qua nhiều service.
-- Proposal: Mọi event nên có `correlationId`.
-- Resolution: Accepted
-- Rationale: `correlationId` giúp trace luồng xử lý giữa các service.
-- Impact: Provider gửi `correlationId`; Analytics log theo `correlationId`.
+## Issue #1 — Thống nhất tên event IoT
 
----
-
-## Issue #4 — Timestamp và timezone không thống nhất
-
-- Raised by: Consumer
-- Endpoint/Event: All events
-- Concern: Nếu timestamp khác timezone hoặc format, Analytics aggregate sai theo giờ/ngày.
-- Proposal: Dùng `timestamp` theo ISO 8601 UTC, ví dụ `2026-05-18T12:00:00Z`.
-- Resolution: Accepted
-- Rationale: Timestamp thống nhất giúp aggregate đúng theo giờ/ngày.
-- Impact: Provider gửi timestamp chuẩn; Analytics aggregate theo timestamp của event.
-
----
-
-## Issue #5 — IoT telemetry cần thống nhất unit và batch
-
-- Raised by: Consumer
-- Endpoint/Event: `telemetry.ingested.v1`
-- Concern: Nếu unit không thống nhất, metric nhiệt độ/độ ẩm/chất lượng không khí sẽ sai. Ngoài ra nếu IoT gửi batch nhưng Analytics chỉ xử lý event đơn thì sẽ lỗi tích hợp.
+- Raised by: Provider B1 và Consumer B5
+- Event/Topic:
+  - `telemetry.ingested`
+- Concern: Nếu B1 và B5 dùng tên event khác nhau, Analytics sẽ không subscribe đúng dữ liệu telemetry.
 - Proposal:
-  - `metricType`: `temperature`, `humidity`, `light`, `air_quality`, `pressure`
-  - `unit`: `°C`, `%`, `lux`, `ppm`, `μg/m³`, `Pa`
-  - V1 chỉ nhận event đơn, mỗi event gồm `value` và `timestamp`.
-  - `batchId` là optional field để chuẩn bị cho V2, không bắt buộc trong Lab 02.
-  - Unit không hợp lệ sẽ được đưa vào DLQ nếu hệ thống hỗ trợ.
+  - B1 publish event telemetry bằng tên `telemetry.ingested`.
+  - Nếu cần version event, dùng suffix `.v1` theo convention của B1 trong bước phát triển tiếp theo.
 - Resolution: Accepted
-- Rationale: IoT Ingestion normalize unit trước khi publish giúp Analytics không phải tự convert dữ liệu từ nhiều loại sensor.
-- Impact: IoT Ingestion publish đúng unit đã thống nhất; Analytics validate unit trước khi aggregate.
+- Rationale: Tên event thống nhất giúp B5 nhận đúng luồng dữ liệu cảm biến.
+- Impact:
+  - B1 publish đúng event name.
+  - B5 subscribe đúng topic/event name.
 
 ---
 
-## Issue #6 — Camera event không gửi binary image
+## Issue #2 — Thống nhất unit sensor
 
-- Raised by: Consumer
-- Endpoint/Event:
-  - `camera.motion.detected`
-  - `camera.status.changed`
-- Concern: Gửi ảnh trực tiếp trong event làm payload lớn, dễ timeout hoặc nghẽn broker.
-- Proposal: Camera event chỉ gửi metadata; nếu cần ảnh thì gửi `imageRef`.
-- Resolution: Accepted
-- Rationale: Analytics chỉ cần metadata để thống kê.
-- Impact: Camera Stream không gửi binary image trong event.
-
----
-
-## Issue #7 — Core Business cần thống nhất severity và status
-
-- Raised by: Consumer
-- Endpoint/Event:
-  - `alert.created`
-  - `alert.resolved`
-- Concern: Nếu severity/status không thống nhất, Analytics thống kê cảnh báo sai.
+- Raised by: Provider B1
+- Event/Topic:
+  - `telemetry.ingested`
+- Concern: Sensor có thể gửi nhiều đơn vị khác nhau như °C/°F, Pa/bar. Nếu không normalize, B5 aggregate sai metric.
 - Proposal:
-  - `severity`: `low`, `medium`, `high`, `critical`
-  - `status`: `open`, `resolved`, `ignored`
+  - B1 normalize unit trước khi publish.
+  - Unit hợp lệ:
+    - `°C` cho nhiệt độ
+    - `Pa` cho áp suất
+    - `lux` cho ánh sáng
+    - `ppm` hoặc `μg/m³` cho chất lượng không khí
+    - `%` cho độ ẩm
+  - Unit không hợp lệ sẽ đưa vào DLQ.
 - Resolution: Accepted
-- Rationale: Enum thống nhất giúp thống kê cảnh báo đúng.
-- Impact: Core Business gửi severity/status đúng enum đã chốt.
+- Rationale: Normalize tại B1 giúp B5 không phải tự convert dữ liệu từ nhiều loại sensor.
+- Impact:
+  - B1 chịu trách nhiệm convert/normalize unit.
+  - B5 validate unit trước khi aggregate.
 
 ---
 
-## Issue #8 — Access Gate cần thống nhất direction và result
+## Issue #3 — Idempotency cho telemetry event
 
-- Raised by: Consumer
-- Endpoint/Event:
-  - `access.log.created`
-  - `access.denied`
-- Concern: Nếu `direction` hoặc `result` không thống nhất, Analytics thống kê sai lượt vào/ra và lượt bị từ chối.
+- Raised by: Provider B1
+- Event/Topic:
+  - All IoT events
+- Concern: Queue async có thể retry, khiến B5 nhận trùng event và aggregate sai.
 - Proposal:
-  - `direction`: `entry` hoặc `exit`
-  - `result`: `allowed` hoặc `denied`
+  - Mỗi event phải có `eventId`.
+  - `eventId` là string UUID v4.
+  - B5 dùng `eventId` làm idempotency key.
+  - Dedup window tối thiểu 24 giờ.
 - Resolution: Accepted
-- Rationale: Enum thống nhất giúp aggregate đúng.
-- Impact: Access Gate publish direction/result theo enum đã chốt.
+- Rationale: `eventId` giúp B5 bỏ qua event trùng khi broker retry.
+- Impact:
+  - B1 sinh `eventId` duy nhất cho mỗi event.
+  - B5 lưu event đã xử lý để deduplicate.
 
 ---
 
-## Issue #9 — Retry và dead-letter queue
+## Issue #4 — Correlation ID cho tracing
 
-- Raised by: Consumer
-- Endpoint/Event: All events
-- Concern: Event sai schema hoặc lỗi xử lý nếu retry vô hạn sẽ gây lặp và nghẽn hệ thống.
+- Raised by: Provider B1
+- Event/Topic:
+  - All IoT events
+- Concern: Khi metric sai hoặc có lỗi xử lý, cần trace event từ device → IoT → Analytics.
+- Proposal:
+  - Mỗi event có `correlationId`.
+  - Nếu upstream chưa có, B1 tự sinh UUID.
+- Resolution: Accepted
+- Rationale: `correlationId` giúp trace end-to-end giữa các service.
+- Impact:
+  - B1 truyền `correlationId`.
+  - B5 log theo `correlationId`.
+
+---
+
+## Issue #5 — Batch telemetry
+
+- Raised by: Consumer B5
+- Event/Topic:
+  - `telemetry.ingested`
+- Concern: B5 muốn nhận từng event riêng lẻ để aggregate realtime, nhưng B1 có thể muốn gửi batch.
+- Proposal:
+  - V1 trong Lab 02 chỉ nhận event đơn.
+  - Mỗi event có `value` và `timestamp`.
+  - `batchId` là optional field để chuẩn bị cho V2.
+- Resolution: Modified
+- Rationale: Lab 02 giữ event đơn để đơn giản, nhưng vẫn mở đường cho batch ở Lab sau.
+- Impact:
+  - B1 publish từng telemetry event.
+  - B5 chưa cần xử lý `readings[]` batch trong Lab 02.
+
+---
+
+## Issue #6 — Retry, DLQ và out-of-order
+
+- Raised by: Provider B1 và Consumer B5
+- Event/Topic:
+  - All IoT events
+- Concern:
+  - Payload sai schema có thể làm hỏng pipeline.
+  - Retry vô hạn có thể gây loop.
+  - Event có thể đến không đúng thứ tự.
 - Proposal:
   - Retry tối đa 3 lần.
-  - Với IoT events, retry theo backoff 1s, 2s, 4s nếu broker hỗ trợ.
-  - Sau 3 lần lỗi, đưa event vào DLQ nếu hệ thống có hỗ trợ.
-  - DLQ record nên có `eventId`, `eventType`, `errorType`, `errorMessage`, `failedAt`.
-  - Với IoT, DLQ dự kiến là `campus.iot.dlq`.
-- Resolution: Accepted
-- Rationale: DLQ giúp tách event lỗi để debug mà không làm nghẽn luồng chính.
-- Impact: Provider/Broker ghi nhận retry/DLQ policy; Analytics không aggregate event lỗi.
-
----
-
-## Issue #10 — Event ordering
-
-- Raised by: Consumer
-- Endpoint/Event: All events
-- Concern: Event có thể đến không đúng thứ tự do Queue async, đặc biệt là telemetry từ nhiều device IoT.
-- Proposal:
-  - Analytics aggregate theo `timestamp`, không dựa vào thứ tự nhận event.
-  - Với IoT, `timestamp` là thời điểm device gửi dữ liệu, không phải thời điểm publish.
+  - Backoff: 1s, 2s, 4s.
+  - DLQ: `campus.iot.dlq`.
+  - DLQ retention: 7 ngày.
+  - DLQ record có `errorType`, `errorMessage`, `failedAt`.
   - Timestamp dùng ISO 8601 UTC, ví dụ `2026-05-18T12:00:00Z`.
+  - B5 aggregate theo `timestamp`, không dựa vào thứ tự nhận event.
 - Resolution: Accepted
-- Rationale: Aggregate theo timestamp giúp metric ổn định hơn khi event bị delay hoặc đến sai thứ tự.
-- Impact: Provider phải gửi timestamp chính xác; Analytics cần xử lý event theo cửa sổ thời gian.
+- Rationale: DLQ giúp tách event lỗi; timestamp UTC giúp thống kê đúng theo thời gian.
+- Impact:
+  - B1 cấu hình retry/DLQ.
+  - B5 xử lý late-arriving event theo cửa sổ thời gian.
 
 ---
 
-# Chốt hợp đồng
+# 3. Pair 07 — B2 Camera Stream → B5 Analytics
 
-Provider sign-off:
+## Issue #7 — Dữ liệu camera cho Analytics
 
-- B1 — IoT Ingestion:
-- B2 — Camera Stream:
-- B6 — Core Business:
-- B3 — Access Gate:
+- Raised by: Consumer B5
+- Event/Topic:
+  - `camera.motion.detected`
+  - `camera.status.changed`
+- Concern: B5 cần event camera để thống kê số lần phát hiện chuyển động, trạng thái camera và các event bất thường.
+- Proposal:
+  - B2 publish metadata camera event cho B5.
+  - Không gửi binary image trực tiếp trong event.
+  - Nếu cần ảnh, chỉ gửi `imageRef` hoặc `image_url`.
+- Resolution: Need confirm from B2
+- Rationale: Metadata đủ cho Analytics aggregate, tránh payload lớn.
+- Impact:
+  - B2 cần xác nhận lại topic/event name và payload.
+  - B5 aggregate theo `cameraId`, `area`, `timestamp`.
 
-Consumer sign-off:
+---
 
-- B5 — Analytics:
+## Issue #8 — Payload camera tối thiểu
 
-Witness:
+- Raised by: Consumer B5
+- Event/Topic:
+  - `camera.motion.detected`
+- Concern: Nếu thiếu camera context, B5 khó aggregate theo khu vực/camera.
+- Proposal:
+  - Required fields:
+    - `eventId`
+    - `correlationId`
+    - `timestamp`
+    - `eventType`
+    - `cameraId`
+    - `area`
+    - `eventName`
+  - Optional fields:
+    - `imageRef`
+    - `confidence`
+    - `status`
+    - `metadata`
+- Resolution: Need confirm from B2
+- Rationale: Các field này đủ để B5 thống kê số motion event và camera status.
+- Impact:
+  - B2 cần xác nhận field bắt buộc.
+  - B5 xử lý duplicate bằng `eventId`.
 
-Date:
+---
+
+# 4. Pair B4-B5 — B4 AI Vision → B5 Analytics
+
+## Issue #9 — Event kết quả phân tích AI
+
+- Raised by: Consumer B5
+- Event/Topic:
+  - `vision.analysis.completed`
+- Concern: B5 cần dữ liệu phân tích từng frame ảnh để vẽ biểu đồ mật độ, phát hiện bất thường và KPI theo camera/khu vực.
+- Proposal:
+  - Khi B4 phân tích xong 1 frame, B4 push event JSON sang B5.
+  - Payload bám theo chuẩn event chung của hệ thống.
+- Resolution: Accepted
+- Rationale: B5 có dữ liệu realtime để aggregate AI metric.
+- Impact:
+  - B4 publish event `vision.analysis.completed`.
+  - B5 consume event để tính metric AI.
+
+Payload thống nhất:
+
+```json
+{
+  "eventId": "uuid-v4",
+  "correlationId": "uuid-v4",
+  "timestamp": "2026-05-20T10:30:02Z",
+  "eventType": "vision.analysis.completed",
+  "data": {
+    "cameraId": "cam-gate-01",
+    "detected": true,
+    "object": "person",
+    "confidence": 0.95,
+    "riskLevel": "low"
+  }
+}
+## Issue #10 — Tracing và idempotency với AI event
+
+- Raised by: B4 và B5
+- Event/Topic:
+  - `vision.analysis.completed`
+- Concern: AI event có thể bị retry hoặc cần trace từ lúc camera chụp ảnh đến khi B5 xử lý.
+- Proposal:
+  - Bắt buộc truyền `correlationId` xuyên suốt từ B2 → B4 → B5.
+  - B4 tự sinh `eventId` UUID cho mỗi event gửi sang B5.
+  - B5 deduplicate bằng `eventId`.
+- Resolution: Accepted
+- Rationale: Tránh lặp dữ liệu khi retry và hỗ trợ debug cross-service.
+- Impact:
+  - B4 đảm bảo `eventId` và `correlationId`.
+  - B5 lưu event đã xử lý để deduplicate.
+
+---
+
+# 5. Pair 08 — B6 Core Business → B5 Analytics
+
+## Issue #11 — SLA và topic Core Business event
+
+- Raised by: Provider B6 và Consumer B5
+- Topic/Queue:
+  - `core-business-events`
+- Concern: Core Business gửi alert/decision/policy event cho Analytics; cần thống nhất SLA, retention và delivery guarantee.
+- Proposal:
+  - Communication type: Queue async RabbitMQ/Kafka.
+  - Throughput: ≥ 500 events/sec.
+  - Latency: P95 ≤ 5s, P99 ≤ 10s.
+  - Delivery: at-least-once.
+  - Availability: 99.5%.
+  - Data retention: 30 ngày.
+- Resolution: Accepted
+- Rationale: Analytics không yêu cầu realtime tuyệt đối nhưng cần dữ liệu đủ để aggregate KPI.
+- Impact:
+  - B6 publish vào `core-business-events`.
+  - B5 consume bằng consumer group `analytics-service`.
+
+---
+
+## Issue #12 — Event format và validation từ Core Business
+
+- Raised by: Provider B6
+- Topic/Queue:
+  - `core-business-events`
+- Concern: Payload cần thống nhất để B5 aggregate alert/decision chính xác.
+- Proposal:
+  - Message format: JSON UTF-8.
+  - Max payload size: 512 KB.
+  - Timestamp format: ISO 8601.
+  - Schema version được track trong event payload.
+  - No sensitive PII in events.
+- Resolution: Accepted
+- Rationale: Chuẩn hóa format giúp B5 parse và validate ổn định.
+- Impact:
+  - B6 gửi rich metadata cần thiết.
+  - B5 validate schema trước khi aggregate.
+
+---
+
+## Issue #13 — Delivery, retry, DLQ và monitoring cho Core Business event
+
+- Raised by: B6 và B5
+- Topic/Queue:
+  - `core-business-events`
+- Concern:
+  - Queue async có thể duplicate.
+  - Event lỗi cần DLQ.
+  - Consumer lag cần monitor.
+- Proposal:
+  - At-least-once delivery.
+  - B5 deduplicate bằng `eventId`.
+  - Dedup window: 30 ngày.
+  - Publisher retries: 3 lần, backoff 100ms, 500ms, 1s.
+  - Consumer retries: 3 lần, backoff 1s, 2s, 4s.
+  - Failed messages → DLQ.
+  - DLQ retention: 30 ngày.
+  - B5 commit offset sau khi aggregation hoàn tất.
+- Resolution: Accepted
+- Rationale: Đảm bảo không mất dữ liệu và tránh tính trùng metric.
+- Impact:
+  - B6 publish durable event.
+  - B5 monitor lag, DLQ và commit offset thủ công.
+
+---
+
+# 6. Pair 09 — B3 Access Gate → B5 Analytics
+
+## Issue #14 — Log ra/vào cho Analytics
+
+- Raised by: Consumer B5
+- Event/Topic:
+  - `access.log.created`
+  - `access.denied`
+- Concern: B5 cần dữ liệu ra/vào để thống kê lượt vào, lượt ra, lượt bị từ chối và giờ cao điểm.
+- Proposal:
+  - B3 publish access event dạng Queue async.
+  - B5 consume để aggregate theo `gateId`, `area`, `direction`, `result`, `timestamp`.
+- Resolution: Need confirm from B3
+- Rationale: Analytics cần log ra/vào để phục vụ dashboard.
+- Impact:
+  - B3 cần xác nhận event name, enum và payload.
+  - B5 tạm dùng schema giả định trong Lab 02.
+
+---
+
+## Issue #15 — Payload Access Gate tối thiểu
+
+- Raised by: Consumer B5
+- Event/Topic:
+  - `access.log.created`
+  - `access.denied`
+- Concern: Nếu enum không thống nhất, B5 thống kê sai lượt vào/ra.
+- Proposal:
+  - Required fields:
+    - `eventId`
+    - `correlationId`
+    - `timestamp`
+    - `eventType`
+    - `accessLogId`
+    - `gateId`
+    - `direction`
+    - `result`
+  - Enum:
+    - `direction`: `entry`, `exit`
+    - `result`: `allowed`, `denied`
+  - Optional fields:
+    - `area`
+    - `userId`
+    - `cardHash`
+    - `reason`
+- Resolution: Need confirm from B3
+- Rationale: Các field này đủ để B5 thống kê access metric.
+- Impact:
+  - B3 cần xác nhận lại.
+  - B5 deduplicate bằng `eventId`.
+
+---
+
+# 7. Pair B7-B5 — B7 Notification → B5 Analytics
+
+## Issue #16 — Topic notification event
+
+- Raised by: B7 và B5
+- Topic/Queue:
+  - `notification-events`
+- Concern: B5 cần notification event để tracking notification metrics, KPI aggregation, dashboard analytics, monitoring/reporting và audit/tracing.
+- Proposal:
+  - B7 publish notification event qua Queue async.
+  - B5 consume topic `notification-events`.
+- Resolution: Accepted
+- Rationale: Queue async phù hợp để tracking notification metrics mà không ảnh hưởng luồng gửi thông báo.
+- Impact:
+  - B7 publish event.
+  - B5 aggregate theo notification status/channel/type.
+
+---
+
+## Issue #17 — Timestamp UTC cho notification event
+
+- Raised by: Consumer B5
+- Topic/Queue:
+  - `notification-events`
+- Concern: Nếu timestamp khác timezone, dashboard aggregate sai theo ngày/giờ.
+- Proposal:
+  - Tất cả timestamp dùng ISO 8601 UTC.
+  - Ví dụ: `2026-05-21T08:30:00Z`.
+- Resolution: Accepted
+- Rationale: UTC giúp đồng bộ nhiều service.
+- Impact:
+  - B7 gửi timestamp UTC.
+  - B5 aggregate theo timestamp UTC.
+
+---
+
+## Issue #18 — Metadata-only payload
+
+- Raised by: Provider B7
+- Topic/Queue:
+  - `notification-events`
+- Concern: Payload notification quá lớn nếu chứa full email/SMS/push content.
+- Proposal:
+  - Không gửi full email body, SMS content hoặc push notification detail.
+  - Chỉ gửi metadata:
+    - `eventId`
+    - `notificationId`
+    - `eventType`
+    - `channel`
+    - `status`
+    - `timestamp`
+    - `correlationId`
+    - `retryCount`
+- Resolution: Accepted
+- Rationale: B5 chỉ cần metadata để aggregate metrics, không cần nội dung thông báo.
+- Impact:
+  - B7 giảm payload size.
+  - B5 không lưu nội dung nhạy cảm.
+
+---
+
+## Issue #19 — Event type của Notification
+
+- Raised by: Consumer B5
+- Topic/Queue:
+  - `notification-events`
+- Concern: B5 cần phân biệt nhiều loại notification để filter dashboard.
+- Proposal:
+  - Supported event types:
+    - `NOTIFICATION_SENT`
+    - `NOTIFICATION_FAILED`
+    - `BROADCAST_TRIGGERED`
+    - `SYSTEM_ALERT_SENT`
+    - `USER_NOTICE_CREATED`
+- Resolution: Accepted
+- Rationale: Event classification giúp Analytics aggregate theo category.
+- Impact:
+  - B7 gửi `eventType`.
+  - B5 group metric theo `eventType`.
+
+---
+
+## Issue #20 — Deduplication, DLQ và offset commit cho Notification
+
+- Raised by: B7 và B5
+- Topic/Queue:
+  - `notification-events`
+- Concern:
+  - At-least-once delivery có thể sinh duplicate.
+  - Payload lỗi cần route riêng.
+  - B7 không muốn tốc độ publish bị ảnh hưởng bởi Analytics.
+- Proposal:
+  - Deduplication key: `eventId`.
+  - Deduplication window: 24 giờ.
+  - Retry attempts: 3.
+  - DLQ: `notification-events-dlq`.
+  - B5 commit offset sau khi xử lý bất đồng bộ hoàn tất.
+  - B7 gửi thêm `retryCount` để B5 tracking reliability.
+- Resolution: Accepted
+- Rationale: Đảm bảo B5 không đếm trùng và không làm ảnh hưởng tốc độ publish của Notification.
+- Impact:
+  - B7 publish retry-safe event.
+  - B5 xử lý async safely và commit offset sau khi aggregate xong.
+
+---
+
+# 8. Quy chuẩn chung cho toàn bộ B5 Analytics
+
+## Issue #21 — Chuẩn field chung cho tất cả event gửi vào B5
+
+- Raised by: B5
+- Event/Topic:
+  - All events
+- Concern: Mỗi nhóm đặt tên field khác nhau sẽ làm B5 parse lỗi hoặc aggregate sai.
+- Proposal:
+  - Mọi event gửi vào B5 nên có tối thiểu:
+    - `eventId`
+    - `correlationId`
+    - `timestamp`
+    - `eventType`
+  - Payload nghiệp vụ đặt trong `data` nếu Provider hỗ trợ.
+  - Timestamp dùng ISO 8601 UTC.
+  - Event phải là JSON UTF-8.
+- Resolution: Accepted / Need provider confirm
+- Rationale: Chuẩn field chung giúp B5 viết consumer thống nhất.
+- Impact:
+  - B5 xử lý được nhiều event từ nhiều service.
+  - Provider giảm rủi ro mismatch contract.
+
+---
+
+## Issue #22 — Deduplication và late-arriving event
+
+- Raised by: B5
+- Event/Topic:
+  - All events
+- Concern: Queue async có thể duplicate hoặc event đến muộn.
+- Proposal:
+  - B5 deduplicate bằng `eventId`.
+  - B5 aggregate theo `timestamp`, không dựa vào thời điểm nhận event.
+  - Với event đến muộn, B5 xử lý theo windowed aggregation.
+- Resolution: Accepted
+- Rationale: Tránh sai metric trong môi trường async.
+- Impact:
+  - B5 cần lưu event processed.
+  - B5 cần xử lý late-arriving event.
+
+---
+
+## Issue #23 — Error handling chung
+
+- Raised by: B5
+- Event/Topic:
+  - All events
+- Concern: Payload lỗi nếu không tách riêng sẽ làm hỏng pipeline aggregate.
+- Proposal:
+  - Payload sai JSON/schema/required field → retry tối đa 3 lần.
+  - Sau retry → DLQ tương ứng của từng Provider.
+  - B5 log lỗi gồm:
+    - `eventId`
+    - `correlationId`
+    - `eventType`
+    - `errorType`
+    - `errorMessage`
+    - `failedAt`
+- Resolution: Accepted / Need provider confirm
+- Rationale: DLQ giúp debug mà không block luồng chính.
+- Impact:
+  - B5 không aggregate event lỗi.
+  - Provider có thể review DLQ để sửa payload.
+
+---
+
+# 9. Sign-off
+
+## Provider sign-off
+
+- B1 — IoT Ingestion: Accepted
+- B2 — Camera Stream: Need confirm
+- B3 — Access Gate: Need confirm
+- B4 — AI Vision: Accepted, chờ B5 xác nhận cuối
+- B6 — Core Business: Accepted
+- B7 — Notification: Accepted
+
+## Consumer sign-off
+
+- B5 — Analytics: Accepted
+
+## Witness
+
+- GV/TA:
+
+## Date
+
+- 2026-05-25
+
+---
