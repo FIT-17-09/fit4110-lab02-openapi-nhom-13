@@ -1,4 +1,4 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: Smart Campus Analytics Service API
   version: 1.0.0
@@ -224,8 +224,9 @@ components:
       required: false
       description: Area, room, or gate filter. If omitted, return all areas.
       schema:
-        type: string
-        nullable: true
+        type:
+          - string
+          - "null"
         example: main-gate
 
   responses:
@@ -289,8 +290,9 @@ components:
           type: string
           format: date
         area:
-          type: string
-          nullable: true
+          type:
+            - string
+            - "null"
         totalAccess:
           type: integer
           minimum: 0
@@ -317,8 +319,9 @@ components:
           type: string
           format: date
         area:
-          type: string
-          nullable: true
+          type:
+            - string
+            - "null"
         items:
           type: array
           items:
@@ -358,11 +361,13 @@ components:
           type: string
           format: date
         area:
-          type: string
-          nullable: true
-        avgTemperature:
-          type: number
-          nullable: true
+          type:
+            - string
+            - "null"
+        aavgTemperature:
+          type:
+            - number
+            - "null"
           example: 30.5
         unit:
           type: string
@@ -381,8 +386,9 @@ components:
           type: string
           format: date
         area:
-          type: string
-          nullable: true
+          type:
+            - string
+            - "null"
         totalAlerts:
           type: integer
           minimum: 0
