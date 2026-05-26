@@ -23,7 +23,6 @@ Ghi chú:
 
 - Các cặp Queue async trong Lab 02 chưa cần AsyncAPI đầy đủ.
 - Mục tiêu Lab 02 là ghi nhận event contract sơ bộ: event/topic, producer, consumer, payload tối thiểu, `eventId`, `timestamp`, `correlationId`, retry/DLQ.
-- Với B3 — Access Gate, hiện B5 chưa nhận được file negotiation-log riêng từ B3, nên phần Pair 09 được ghi theo giả định ban đầu và cần B3 xác nhận lại.
 
 ---
 
@@ -230,6 +229,10 @@ Payload thống nhất:
     "riskLevel": "low"
   }
 }
+```
+
+---
+
 ## Issue #10 — Tracing và idempotency với AI event
 
 - Raised by: B4 và B5
@@ -325,15 +328,20 @@ Payload thống nhất:
 - Event/Topic:
   - `access.log.created`
   - `access.denied`
+- Related REST endpoints from B3:
+  - `/access/logs/recent`
+  - `/access/logs/{logId}`
 - Concern: B5 cần dữ liệu ra/vào để thống kê lượt vào, lượt ra, lượt bị từ chối và giờ cao điểm.
 - Proposal:
-  - B3 publish access event dạng Queue async.
-  - B5 consume để aggregate theo `gateId`, `area`, `direction`, `result`, `timestamp`.
-- Resolution: Need confirm from B3
-- Rationale: Analytics cần log ra/vào để phục vụ dashboard.
+  - B3 cung cấp access log theo contract Access Gate đã thống nhất.
+  - Nếu có event pipeline, B3 publish access event dạng Queue async cho B5.
+  - Nếu chưa có event pipeline, B5 dùng REST/schema log của B3 làm chuẩn dữ liệu.
+  - B5 aggregate theo `gateId`, `area`, `direction`, `result`, `timestamp`.
+- Resolution: Accepted
+- Rationale: Analytics cần log ra/vào để phục vụ dashboard và báo cáo.
 - Impact:
-  - B3 cần xác nhận event name, enum và payload.
-  - B5 tạm dùng schema giả định trong Lab 02.
+  - B3 cung cấp log truy cập theo schema thống nhất.
+  - B5 aggregate access metric từ log/event của Access Gate.
 
 ---
 
@@ -343,7 +351,7 @@ Payload thống nhất:
 - Event/Topic:
   - `access.log.created`
   - `access.denied`
-- Concern: Nếu enum không thống nhất, B5 thống kê sai lượt vào/ra.
+- Concern: B5 cần đủ field để aggregate theo cổng, khu vực, chiều di chuyển và kết quả truy cập.
 - Proposal:
   - Required fields:
     - `eventId`
@@ -355,17 +363,26 @@ Payload thống nhất:
     - `direction`
     - `result`
   - Enum:
-    - `direction`: `entry`, `exit`
-    - `result`: `allowed`, `denied`
+    - `direction`: `IN`, `OUT`
+    - `result`: `ALLOWED`, `DENIED`
   - Optional fields:
     - `area`
     - `userId`
     - `cardHash`
+    - `cardStatus`
+    - `operatorNote`
     - `reason`
-- Resolution: Need confirm from B3
-- Rationale: Các field này đủ để B5 thống kê access metric.
+  - B3-specific rules:
+    - `operatorNote` có thể nullable.
+    - `cardStatus`: `ACTIVE`, `BLOCKED`, `EXPIRED`.
+    - Access log retention tối thiểu 30 ngày.
+    - REST timeout tối đa 3 giây.
+    - `/health` không yêu cầu Bearer token.
+- Resolution: Accepted
+- Rationale: Các field này đủ để B5 thống kê access metric và khớp với contract của B3.
 - Impact:
-  - B3 cần xác nhận lại.
+  - B3 cung cấp/publish log theo field đã thống nhất.
+  - B5 mapping `IN` thành lượt vào, `OUT` thành lượt ra.
   - B5 deduplicate bằng `eventId`.
 
 ---
@@ -549,7 +566,7 @@ Payload thống nhất:
 
 - B1 — IoT Ingestion: Accepted
 - B2 — Camera Stream: Need confirm
-- B3 — Access Gate: Need confirm
+- B3 — Access Gate: Accepted
 - B4 — AI Vision: Accepted, chờ B5 xác nhận cuối
 - B6 — Core Business: Accepted
 - B7 — Notification: Accepted
