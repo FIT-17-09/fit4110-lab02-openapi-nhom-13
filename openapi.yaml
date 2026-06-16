@@ -168,6 +168,78 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /analytics/events:
+    post:
+      tags:
+        - Analytics
+      summary: Receive analytics event
+      description: Receive event data from upstream services such as IoT Ingestion, Camera Stream, AI Vision, Access Gate, Core Business, or Notification for analytics processing.
+      operationId: receiveAnalyticsEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyticsEventRequest'
+            examples:
+              telemetryEvent:
+                value:
+                  eventId: "550e8400-e29b-41d4-a716-446655440000"
+                  correlationId: "a12f9c88-1111-2222-3333-abcdef123456"
+                  timestamp: "2026-05-18T12:00:00Z"
+                  eventType: "telemetry.ingested"
+                  source: "iot-ingestion"
+                  data:
+                    deviceId: "sensor-001"
+                    metricType: "temperature"
+                    value: 30.8
+                    unit: "°C"
+                    area: "room-a101"
+              accessEvent:
+                value:
+                  eventId: "550e8400-e29b-41d4-a716-446655440001"
+                  correlationId: "a12f9c88-1111-2222-3333-abcdef123456"
+                  timestamp: "2026-05-18T12:05:00Z"
+                  eventType: "access.log.created"
+                  source: "access-gate"
+                  data:
+                    accessLogId: "log-001"
+                    gateId: "gate-01"
+                    direction: "IN"
+                    result: "ALLOWED"
+                    area: "main-gate"
+      responses:
+        '202':
+          description: Event accepted for analytics processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsEventAcceptedResponse'
+              examples:
+                accepted:
+                  value:
+                    eventId: "550e8400-e29b-41d4-a716-446655440000"
+                    status: accepted
+                    message: Event accepted for processing
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Duplicate event
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                duplicate:
+                  value:
+                    type: https://smart-campus.example.com/problems/duplicate-event
+                    title: Duplicate event
+                    status: 409
+                    detail: eventId has already been processed
+                    instance: /analytics/events
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /dashboard/overview:
     get:
       tags:
@@ -364,7 +436,7 @@ components:
           type:
             - string
             - "null"
-        aavgTemperature:
+        avgTemperature:
           type:
             - number
             - "null"
@@ -509,6 +581,74 @@ components:
           type: string
           enum:
             - celsius
+
+    AnalyticsEventRequest:
+      type: object
+      required:
+        - eventId
+        - correlationId
+        - timestamp
+        - eventType
+        - source
+        - data
+      properties:
+        eventId:
+          type: string
+          format: uuid
+          description: Unique event id for idempotency.
+        correlationId:
+          type: string
+          description: Correlation id for tracing across services.
+        timestamp:
+          type: string
+          format: date-time
+          description: Event timestamp in ISO 8601 UTC format.
+        eventType:
+          type: string
+          description: Type of event sent to Analytics.
+          enum:
+            - telemetry.ingested
+            - device.status.changed
+            - camera.motion.detected
+            - camera.status.changed
+            - vision.analysis.completed
+            - core.alert.created
+            - core.decision.created
+            - access.log.created
+            - access.denied
+            - notification.event.created
+        source:
+          type: string
+          description: Source service that publishes the event.
+          enum:
+            - iot-ingestion
+            - camera-stream
+            - ai-vision
+            - core-business
+            - access-gate
+            - notification
+        data:
+          type: object
+          description: Event-specific payload.
+          additionalProperties: true
+
+    AnalyticsEventAcceptedResponse:
+      type: object
+      required:
+        - eventId
+        - status
+        - message
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - accepted
+        message:
+          type: string
+          example: Event accepted for processing
 
     Problem:
       type: object
